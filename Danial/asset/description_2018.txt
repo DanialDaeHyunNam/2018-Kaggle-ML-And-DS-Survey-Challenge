@@ -1,0 +1,8 @@
+
+#### 2018 files description
+- multipleChoiceResponses : 
+    - The 2018 Kaggle Machine Learning & Data Science Survey
+- freeFormResponses : 
+    - When survey respondents selected the "Other" category, an option was given for a text response. These text responses were separated and shuffled to protect user privacy.
+- SurveySchema : 
+    - How many respondents answered each question?
