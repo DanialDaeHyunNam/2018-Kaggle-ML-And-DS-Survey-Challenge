@@ -1,0 +1,32 @@
+
+#### 2017 files description
+- conversionRates : 
+    - Currency conversion rates (to USD) as accessed from the R package "quantmod" on September 14, 2017.
+- schema :
+    - A CSV file with survey schema. This schema includes the questions that correspond to each column name in both the multipleChoiceResponses.csv and freeformResponses.csv.
+- multipleChoiceResponses : 
+    - Respondents' answers to multiple choice and ranking questions. These are non-randomized and thus a single row does correspond to all of a single user's answers.
+- freeFormResponses :
+    - Respondents' freeform answers to Kaggle's survey questions. These responses are randomized within a column, so that reading across a single row does not give a single user's answers.
+
+#### Respondent type :
+- All : 
+    - Every respondent was shown this question
+
+- Non-worker : 
+    - Respondents who indicated that they were "Not employed, and not looking for work" or "I prefer not to say"
+
+- Non-switcher : 
+    - Respondents that indicated that they were not actively looking to switch careers to data science.
+
+- Worker :
+    - Respondents who indicted that they were "Employed full-time", "Employed part-time", "Independent contractor, freelancer, or self-employed", or "retired"
+
+- CodingWorker : 
+    - Respondents who indicated that they were "Employed full-time", "Employed part-time", or an "Independent contractor, freelancer, or self-employed" AND that they write code to analyze data in their current job
+
+- CodingWorker-NC : 
+    - Respondents who indicated that they were "Employed full-time" or "Employed part-time" AND that they write code to analyze data in their current job. 
+
+- Learners : 
+    - Respondents who indicated that they were either students, formally or informally learning data science skills, planning to transition into data science, or not employed but looking for work
