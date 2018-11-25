@@ -97,11 +97,13 @@ class KaggleSurvey:
             print("2017 files : ", list(self.__dict_2017.keys()))
             print("2018 files : ", list(self.__dict_2018.keys()))
             self.__save_dfs()
+            self.__get_od_df()
             self.__make_q_list()
         else:
             self.__multi_18 = pd.read_csv(self.__asset_path + "multi_18.csv") 
             self.__free_18 = pd.read_csv(self.__asset_path + "free_18.csv") 
-            self.__survey_schema_18 = pd.read_csv(self.__asset_path + "survey_schema_18.csv") 
+            self.__survey_schema_18 = pd.read_csv(self.__asset_path + "survey_schema_18.csv")
+            self.__get_od_df()
             self.__make_q_list()
         print("Done.")
         print("Tab 키를 이용해서 내부 함수들을 꼭 확인하셔서 같은 작업을 두 번 안하시길.. 화이팅")
@@ -148,7 +150,15 @@ class KaggleSurvey:
         rearrange_cols[0], rearrange_cols[-1] = cols[0], cols[-1]
         self.__survey_schema_18 = self.__dict_2018["SurveySchema"][rearrange_cols]
         self.save_csv(self.__survey_schema_18, "survey_schema_18.csv")
-        
+    
+    def __get_od_df(self):
+        path = "../"
+        files = [f for f in listdir(path) if isfile(join(path, f)) and "pkl" in f]
+        if "od_df.pkl" in files:
+            self.__od_df = pd.read_pickle("../od_df.pkl")
+        else:
+            self.__od_df = None
+    
     def __make_q_list(self):
         single_choice, multiple_choice = self.__count_single_multiple_choices()
         q_list, is_single = self.__make_question_list(single_choice, multiple_choice)
@@ -226,6 +236,29 @@ class KaggleSurvey:
             if len(cols) == 0:
                 print(result)
     
+    def __save_order_df(self, question_number, new_order):
+        df = None
+        if type(self.__od_df) == pd.core.frame.DataFrame:
+            df = self.__od_df
+            if question_number not in df.question_number.values:
+                df = df.append({str(question_number): new_order}, ignore_index=True)
+        else:
+            df = pd.DataFrame({
+                "question_number" : [str(question_number)],
+                "order" : [new_order]
+            })
+        df.to_pickle("../od_df.pkl")
+        
+    def __get_order_li(self, df, q, question_number):
+        if type(self.__od_df) == pd.core.frame.DataFrame:
+            df_ = self.__od_df
+            if str(question_number) not in df_.question_number.values:
+                return [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
+            else:
+                return df_[df_["question_number"] == str(question_number)].order.values[0]
+        else:
+            return [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
+    
     def __per_df(self, series) :
         val_cnt = series.values.sum()
         return series / val_cnt
@@ -254,7 +287,10 @@ class KaggleSurvey:
                         print(" ", str(idx + 1) + ".", q_[-1])
             if is_need_display_order:
                 return display_order
-            
+    
+    def get_o_df(self):
+        return self.__od_df
+    
     def get_q_df(self):
         """
             2018년도 문항이 들어간 df를 반환한다. 컬럼은 [is_single, question]으로 이루어져있다.
@@ -353,7 +389,7 @@ class KaggleSurvey:
         df.to_csv(self.__asset_path + filename, index = index)
         
     def draw_plot(self, question_number, plot_cols = 3, df = [], name = "Unnamed", dfs_ = {}, 
-                  order = [], is_need_other = False):
+                  order = [], is_need_other = False, is_save_order = True):
         """
             question_number : 대답 분포를 보고싶은 문항 숫자(int)를 입력
             plot_cols : plot을 그릴 때 컬럼 개수, default는 3개
@@ -408,8 +444,10 @@ class KaggleSurvey:
                     if idx == 0:
                         if len(order) != 0:
                             order_li = order
+                            self.__save_order_df(question_number, order)
                         else:
-                            order_li = [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
+                            order_li = self.__get_order_li(df, q, question_number)
+#                             order_li = [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
                     ax_ = ax[idx // plot_cols, idx % plot_cols] if depth_of_dfs > 1 else ax[idx % plot_cols]
                     sns.countplot(df[q].sort_index(), order = order_li, ax = ax_)
                     ax_.set_xticklabels(order_li, rotation=90)
