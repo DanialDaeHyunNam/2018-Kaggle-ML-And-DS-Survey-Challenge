@@ -236,12 +236,17 @@ class KaggleSurvey:
             if len(cols) == 0:
                 print(result)
     
-    def __save_order_df(self, question_number, new_order):
+    def __save_order_df(self, question_number, new_order, is_rewrite_order):
         df = None
         if type(self.__od_df) == pd.core.frame.DataFrame:
             df = self.__od_df
-            if question_number not in df.question_number.values:
+            if str(question_number) not in df.question_number.values:
                 df = df.append({str(question_number): new_order}, ignore_index=True)
+            else:
+                if is_rewrite_order:
+                    idx = df[df.question_number == str(question_number)].index[0]
+                    df.at[idx, "order"] = new_order
+                
         else:
             df = pd.DataFrame({
                 "question_number" : [str(question_number)],
@@ -389,7 +394,7 @@ class KaggleSurvey:
         df.to_csv(self.__asset_path + filename, index = index)
         
     def draw_plot(self, question_number, plot_cols = 3, df = [], name = "Unnamed", dfs_ = {}, 
-                  order = [], is_need_other = False, is_save_order = True):
+                  order = [], is_need_other = False, is_rewrite_order = False):
         """
             question_number : 대답 분포를 보고싶은 문항 숫자(int)를 입력
             plot_cols : plot을 그릴 때 컬럼 개수, default는 3개
@@ -444,7 +449,7 @@ class KaggleSurvey:
                     if idx == 0:
                         if len(order) != 0:
                             order_li = order
-                            self.__save_order_df(question_number, order)
+                            self.__save_order_df(question_number, order, is_rewrite_order)
                         else:
                             order_li = self.__get_order_li(df, q, question_number)
 #                             order_li = [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
