@@ -268,6 +268,10 @@ class KaggleSurvey:
         val_cnt = series.values.sum()
         return series / val_cnt
     
+    def __per_df_single(self, df, col):
+        val_cnt = df[col].value_counts() 
+        return val_cnt / val_cnt.sum()
+    
     def get_question(self, number, is_need_display_order = False):
         """
             현재는 2018년도 문항들만 보여준다.
@@ -368,16 +372,21 @@ class KaggleSurvey:
         
         return df[df[col] != condition] if is_false else df[df[col] == condition]
     
-    def set_df_I_want_by_country_name(self, countries = []):
+    def set_df_I_want_by_country_name(self, countries = [], is_need_total = False):
         """
             객체 내부에 Dataframe을 저장하는 방식. 
             따로 Get해서 만든 Dictionary를 draw_plot함수에 넣어줄 필요없이 내부에 저장된 df를 사용하게 하고 싶은 경우에 사용.
             contries : 나라 이름을 리스트 형식으로 넣어준다.
                 예:) ["Korea", "China", "India" ... ]
+            is_need_total : total 데이터 프레임도 넣고 싶으면, True를 넣어준다.
         """
         
         keys = []
         values = []
+        if is_need_total:
+            keys.append("Total")
+            values.append(self.__multi_18)
+            
         countrie_names = self.__multi_18["Q3"].unique().tolist()
         for country in countries:
             if country not in countrie_names:
@@ -394,7 +403,7 @@ class KaggleSurvey:
         df.to_csv(self.__asset_path + filename, index = index)
         
     def draw_plot(self, question_number, plot_cols = 3, df = [], name = "Unnamed", dfs_ = {}, 
-                  order = [], is_need_other = False, is_rewrite_order = False):
+                  order = [], is_need_other = False, is_use_the_same_y_lim = True, ylim_offset = 0.1 ,is_rewrite_order = False):
         """
             question_number : 대답 분포를 보고싶은 문항 숫자(int)를 입력
             plot_cols : plot을 그릴 때 컬럼 개수, default는 3개
@@ -428,6 +437,15 @@ class KaggleSurvey:
         else:
             print("Valid DataFrame이 없습니다.")
         
+        if is_use_the_same_y_lim:
+            q = "Q" + str(question_number) + "_MULTIPLE_CHOICE" if question_number == 12 else "Q" + str(question_number)
+            max_value = 0
+            for df in dfs:
+                ncount = len(df)
+                tmp = df.groupby(q).size().values/ncount
+                tmp_max_value = (tmp.max() + ylim_offset)
+                max_value = tmp_max_value if tmp_max_value > max_value else max_value
+        
         is_single_choice_question = self.__q_df.loc[question_number]["is_single"]
         
         if is_single_choice_question:
@@ -445,7 +463,9 @@ class KaggleSurvey:
                     display(Markdown("##### Plot row가 2개 이상이므로 Xlabel은 지문 내용을 참고하세요."))
                 order_li = []
                 print("왼쪽에서부터 지문 내용 : ")
+                
                 for idx, df in enumerate(dfs):
+                    
                     if idx == 0:
                         if len(order) != 0:
                             order_li = order
@@ -454,14 +474,20 @@ class KaggleSurvey:
                             order_li = self.__get_order_li(df, q, question_number)
 #                             order_li = [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
                     ax_ = ax[idx // plot_cols, idx % plot_cols] if depth_of_dfs > 1 else ax[idx % plot_cols]
-                    sns.countplot(df[q].sort_index(), order = order_li, ax = ax_)
+                    self.__per_df_single(df, q).plot.bar(ax = ax_)
+#                     sns.countplot(df[q].sort_index(), order = order_li, ax = ax_)
                     ax_.set_xticklabels(order_li, rotation=90)
                     ax_.set_title(dfs_keys[idx], fontdict = fontdict)
+                    if is_use_the_same_y_lim:
+                        ax_.set_ylim(0, max_value)
+            
                     if depth_of_dfs > 1:
                         ax_.set(xticklabels=[])
+                        
                 for idx, answer in enumerate(order_li):
                     print(idx + 1, answer)
                 plt.show()
+                
         else:
             order_li = self.get_question(question_number, is_need_display_order=True)
             cols = [
@@ -497,6 +523,9 @@ class KaggleSurvey:
                 self.__per_df(df).plot.bar(ax = ax_)
                 ax_.set_xticklabels(order_li, rotation=90)
                 ax_.set_title(dfs_keys[idx], fontdict = fontdict)
+                if is_use_the_same_y_lim:
+                    ax_.set_ylim(0, max_value)
+                    
                 if depth_of_dfs > 1:
                     ax_.set(xticklabels=[])
             plt.show()
