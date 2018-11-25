@@ -97,11 +97,13 @@ class KaggleSurvey:
             print("2017 files : ", list(self.__dict_2017.keys()))
             print("2018 files : ", list(self.__dict_2018.keys()))
             self.__save_dfs()
+            self.__get_od_df()
             self.__make_q_list()
         else:
             self.__multi_18 = pd.read_csv(self.__asset_path + "multi_18.csv") 
             self.__free_18 = pd.read_csv(self.__asset_path + "free_18.csv") 
-            self.__survey_schema_18 = pd.read_csv(self.__asset_path + "survey_schema_18.csv") 
+            self.__survey_schema_18 = pd.read_csv(self.__asset_path + "survey_schema_18.csv")
+            self.__get_od_df()
             self.__make_q_list()
         print("Done.")
         print("Tab 키를 이용해서 내부 함수들을 꼭 확인하셔서 같은 작업을 두 번 안하시길.. 화이팅")
@@ -148,7 +150,15 @@ class KaggleSurvey:
         rearrange_cols[0], rearrange_cols[-1] = cols[0], cols[-1]
         self.__survey_schema_18 = self.__dict_2018["SurveySchema"][rearrange_cols]
         self.save_csv(self.__survey_schema_18, "survey_schema_18.csv")
-        
+    
+    def __get_od_df(self):
+        path = "../"
+        files = [f for f in listdir(path) if isfile(join(path, f)) and "pkl" in f]
+        if "od_df.pkl" in files:
+            self.__od_df = pd.read_pickle("../od_df.pkl")
+        else:
+            self.__od_df = None
+    
     def __make_q_list(self):
         single_choice, multiple_choice = self.__count_single_multiple_choices()
         q_list, is_single = self.__make_question_list(single_choice, multiple_choice)
@@ -226,9 +236,41 @@ class KaggleSurvey:
             if len(cols) == 0:
                 print(result)
     
+    def __save_order_df(self, question_number, new_order, is_rewrite_order):
+        df = None
+        if type(self.__od_df) == pd.core.frame.DataFrame:
+            df = self.__od_df
+            if str(question_number) not in df.question_number.values:
+                df = df.append({str(question_number): new_order}, ignore_index=True)
+            else:
+                if is_rewrite_order:
+                    idx = df[df.question_number == str(question_number)].index[0]
+                    df.at[idx, "order"] = new_order
+                
+        else:
+            df = pd.DataFrame({
+                "question_number" : [str(question_number)],
+                "order" : [new_order]
+            })
+        df.to_pickle("../od_df.pkl")
+        
+    def __get_order_li(self, df, q, question_number):
+        if type(self.__od_df) == pd.core.frame.DataFrame:
+            df_ = self.__od_df
+            if str(question_number) not in df_.question_number.values:
+                return [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
+            else:
+                return df_[df_["question_number"] == str(question_number)].order.values[0]
+        else:
+            return [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
+    
     def __per_df(self, series) :
         val_cnt = series.values.sum()
         return series / val_cnt
+    
+    def __per_df_single(self, df, col):
+        val_cnt = df[col].value_counts() 
+        return val_cnt / val_cnt.sum()
     
     def get_question(self, number, is_need_display_order = False):
         """
@@ -254,7 +296,10 @@ class KaggleSurvey:
                         print(" ", str(idx + 1) + ".", q_[-1])
             if is_need_display_order:
                 return display_order
-            
+    
+    def get_o_df(self):
+        return self.__od_df
+    
     def get_q_df(self):
         """
             2018년도 문항이 들어간 df를 반환한다. 컬럼은 [is_single, question]으로 이루어져있다.
@@ -327,16 +372,21 @@ class KaggleSurvey:
         
         return df[df[col] != condition] if is_false else df[df[col] == condition]
     
-    def set_df_I_want_by_country_name(self, countries = []):
+    def set_df_I_want_by_country_name(self, countries = [], is_need_total = False):
         """
             객체 내부에 Dataframe을 저장하는 방식. 
             따로 Get해서 만든 Dictionary를 draw_plot함수에 넣어줄 필요없이 내부에 저장된 df를 사용하게 하고 싶은 경우에 사용.
             contries : 나라 이름을 리스트 형식으로 넣어준다.
                 예:) ["Korea", "China", "India" ... ]
+            is_need_total : total 데이터 프레임도 넣고 싶으면, True를 넣어준다.
         """
         
         keys = []
         values = []
+        if is_need_total:
+            keys.append("Total")
+            values.append(self.__multi_18)
+            
         countrie_names = self.__multi_18["Q3"].unique().tolist()
         for country in countries:
             if country not in countrie_names:
@@ -353,7 +403,7 @@ class KaggleSurvey:
         df.to_csv(self.__asset_path + filename, index = index)
         
     def draw_plot(self, question_number, plot_cols = 3, df = [], name = "Unnamed", dfs_ = {}, 
-                  order = [], is_need_other = False):
+                  order = [], is_need_other = False, is_use_the_same_y_lim = True, ylim_offset = 0.1 ,is_rewrite_order = False):
         """
             question_number : 대답 분포를 보고싶은 문항 숫자(int)를 입력
             plot_cols : plot을 그릴 때 컬럼 개수, default는 3개
@@ -387,6 +437,15 @@ class KaggleSurvey:
         else:
             print("Valid DataFrame이 없습니다.")
         
+        if is_use_the_same_y_lim:
+            q = "Q" + str(question_number) + "_MULTIPLE_CHOICE" if question_number == 12 else "Q" + str(question_number)
+            max_value = 0
+            for df in dfs:
+                ncount = len(df)
+                tmp = df.groupby(q).size().values/ncount
+                tmp_max_value = (tmp.max() + ylim_offset)
+                max_value = tmp_max_value if tmp_max_value > max_value else max_value
+        
         is_single_choice_question = self.__q_df.loc[question_number]["is_single"]
         
         if is_single_choice_question:
@@ -404,21 +463,31 @@ class KaggleSurvey:
                     display(Markdown("##### Plot row가 2개 이상이므로 Xlabel은 지문 내용을 참고하세요."))
                 order_li = []
                 print("왼쪽에서부터 지문 내용 : ")
+                
                 for idx, df in enumerate(dfs):
+                    
                     if idx == 0:
                         if len(order) != 0:
                             order_li = order
+                            self.__save_order_df(question_number, order, is_rewrite_order)
                         else:
-                            order_li = [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
+                            order_li = self.__get_order_li(df, q, question_number)
+#                             order_li = [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
                     ax_ = ax[idx // plot_cols, idx % plot_cols] if depth_of_dfs > 1 else ax[idx % plot_cols]
-                    sns.countplot(df[q].sort_index(), order = order_li, ax = ax_)
+                    self.__per_df_single(df, q).plot.bar(ax = ax_)
+#                     sns.countplot(df[q].sort_index(), order = order_li, ax = ax_)
                     ax_.set_xticklabels(order_li, rotation=90)
                     ax_.set_title(dfs_keys[idx], fontdict = fontdict)
+                    if is_use_the_same_y_lim:
+                        ax_.set_ylim(0, max_value)
+            
                     if depth_of_dfs > 1:
                         ax_.set(xticklabels=[])
+                        
                 for idx, answer in enumerate(order_li):
                     print(idx + 1, answer)
                 plt.show()
+                
         else:
             order_li = self.get_question(question_number, is_need_display_order=True)
             cols = [
@@ -454,6 +523,9 @@ class KaggleSurvey:
                 self.__per_df(df).plot.bar(ax = ax_)
                 ax_.set_xticklabels(order_li, rotation=90)
                 ax_.set_title(dfs_keys[idx], fontdict = fontdict)
+                if is_use_the_same_y_lim:
+                    ax_.set_ylim(0, max_value)
+                    
                 if depth_of_dfs > 1:
                     ax_.set(xticklabels=[])
             plt.show()
