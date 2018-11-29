@@ -266,6 +266,18 @@ class KaggleSurvey:
         else:
             return [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
     
+    def __get_ax(self, ax, idx, plot_cols, depth_of_dfs):
+        ax_ = None
+
+        if plot_cols == 1:
+            ax_ = ax[idx] 
+        elif plot_cols > 1:
+            ax_ = ax[idx // plot_cols, idx % plot_cols] if depth_of_dfs > 1 else ax[idx % plot_cols]
+        else:
+            print("wrong plot_cols.")
+        
+        return ax_
+        
     def __per_df(self, series) :
         val_cnt = series.values.sum()
         return series / val_cnt
@@ -292,14 +304,11 @@ class KaggleSurvey:
             display_order = []
             for idx, q in enumerate(tmp_li):
                 if "_OTHER_TEXT" not in q:                
-                    q_ = self.__print_question(2018, q, is_need_result=True).split("-")
+                    q_ = self.__print_question(2018, q, is_need_result=True).split(" - ")
                     display_order.append(q_[-1].strip())
                     if idx == 0:
                         print(q.split("_")[0] + ".", q_[0])
-                        if number == 35:
-                            print(" ", str(idx + 1) + ".", " Self-" + q_[-1])
-                        else:
-                            print(" ", str(idx + 1) + ".", q_[-1])
+                        print(" ", str(idx + 1) + ".", q_[-1])
                     else:
                         print(" ", str(idx + 1) + ".", q_[-1])
             if is_need_display_order:
@@ -410,7 +419,7 @@ class KaggleSurvey:
     def save_csv(self, df, filename, index=False):
         df.to_csv(self.__asset_path + filename, index = index)
         
-    def draw_plot(self, question_number, plot_cols = 3, df = [], name = "Unnamed", dfs_ = {}, 
+    def draw_plot(self, question_number, plot_cols = 3, df = [], name = "Unnamed", dfs_ = {}, is_need_number_of_respondents = False,
                   order = [], is_need_other = False, is_use_the_same_y_lim = True, ylim_offset = 0.1 ,is_rewrite_order = False):
         """
             question_number : 대답 분포를 보고싶은 문항 숫자(int)를 입력
@@ -447,7 +456,16 @@ class KaggleSurvey:
         
         is_single_choice_question = self.__q_df.loc[question_number]["is_single"]
         
+        length_of_dfs = len(dfs)
+        depth_of_dfs = int(np.ceil(length_of_dfs / float(plot_cols)))
+        if question_number != 3:
+            f, ax = plt.subplots(depth_of_dfs, plot_cols, figsize=(5 * length_of_dfs, 5 * depth_of_dfs))
+        
         if is_single_choice_question:
+            if question_number == 12:
+                display(Markdown("##### Multiple Choice Question."))
+            else:
+                display(Markdown("##### Single Choice Question."))
             self.get_question(question_number)
             if question_number == 3:
                 len_li = [len(df) for df in dfs]
@@ -455,12 +473,8 @@ class KaggleSurvey:
                 
             else:        
                 q = "Q" + str(question_number) + "_MULTIPLE_CHOICE" if question_number == 12 else "Q" + str(question_number)
-                length_of_dfs = len(dfs)
-                depth_of_dfs = int(np.ceil(length_of_dfs / float(plot_cols)))                    
-                f, ax = plt.subplots(depth_of_dfs, plot_cols, figsize=(5 * length_of_dfs, 5 * depth_of_dfs))
-#                 if depth_of_dfs > 1:
-#                     display(Markdown("##### Plot row가 2개 이상이므로 Xlabel은 지문 내용을 참고하세요."))
-                
+
+
                 if is_use_the_same_y_lim:
                     max_value = 0
                     for df in dfs:
@@ -479,23 +493,21 @@ class KaggleSurvey:
                             order_li = order
                             self.__save_order_df(question_number, order, is_rewrite_order)
                         else:
-                            order_li = self.__get_order_li(df, q, question_number)
-#                             order_li = [str_ for str_ in df[q].unique().tolist() if type(str_) != float]
-                    ax_ = None
-                    if plot_cols == 1:
-                        ax_ = ax[idx] 
-                    elif plot_cols > 1:
-                        ax_ = ax[idx // plot_cols, idx % plot_cols] if depth_of_dfs > 1 else ax[idx % plot_cols]
-                    else:
-                        print("wrong plot_cols.")
-                        return
-#                     ax_ = ax[idx // plot_cols, idx % plot_cols] if depth_of_dfs > 1 else ax[idx % plot_cols]
-    
+                            order_li = self.__get_order_li(self.__multi_18, q, question_number)
+                    
+                    ax_ = self.__get_ax(ax, idx, plot_cols, depth_of_dfs)
+                    
                     self.__per_df_single(df, q, order_li).plot.bar(ax = ax_)
+                    
                     for p in ax_.patches:
                         ax_.annotate(str(round(p.get_height() * 100, 2)) + "%", (p.get_x() + p.get_width()/2., p.get_height()), ha='center', va='center', xytext=(0, 10), textcoords='offset points')
+                        
                     ax_.set_xticklabels(list(range(1, len(order_li) + 1)), rotation=0)
-                    ax_.set_title(dfs_keys[idx], fontdict = fontdict)
+                    if is_need_number_of_respondents:
+                        ax_.set_title(dfs_keys[idx] + " (" + str(len(df)) + ")", fontdict = fontdict)
+                    else:
+                        ax_.set_title(dfs_keys[idx], fontdict = fontdict)
+
                     if is_use_the_same_y_lim:
                         ax_.set_ylim(0, max_value)
                         
@@ -504,17 +516,13 @@ class KaggleSurvey:
                 plt.show()
                 
         else:
+            display(Markdown("##### Multiple Choice Question."))
             answers = self.get_question(question_number, is_need_display_order=True)
             cols = [
                 q for q in self.__get_selections_of_multiple_choice_question_as_list(question_number) if "_OTHER_TEXT" not in q
             ] 
             order_li = []
             result_dfs = []
-            length_of_dfs = len(dfs)
-            depth_of_dfs = int(np.ceil(length_of_dfs / float(plot_cols)))
-#             if depth_of_dfs > 1:
-#                 display(Markdown("##### Plot row가 2개 이상이므로 Xlabel은 지문 내용을 참고하세요."))
-            f, ax = plt.subplots(depth_of_dfs, plot_cols, figsize=(5 * length_of_dfs, 5 * depth_of_dfs))
             # 34, 35 answers must add up to 100%
             if question_number == 34 or question_number == 35:
                 if is_use_the_same_y_lim:
@@ -526,18 +534,13 @@ class KaggleSurvey:
                             max_value = tmp_max_value if tmp_max_value > max_value else max_value
                 
                 for idx, df in enumerate(dfs):
-                    ax_ = None
-                    if plot_cols == 1:
-                        ax_ = ax[idx] 
-                    elif plot_cols > 1:
-                        ax_ = ax[idx // plot_cols, idx % plot_cols] if depth_of_dfs > 1 else ax[idx % plot_cols]
-                    else:
-                        print("wrong plot_cols.")
-                        return
-#                     ax_ = ax[idx // plot_cols, idx % plot_cols] if depth_of_dfs > 1 else ax[idx % plot_cols]
+                    ax_ = self.__get_ax(ax, idx, plot_cols, depth_of_dfs)
                     sns.barplot(data = df[cols], ax = ax_)
                     ax_.set_xticklabels(list(range(1, len(df.columns) + 1)), rotation = 0)
-                    ax_.set_title(dfs_keys[idx], fontdict = fontdict)
+                    if is_need_number_of_respondents:
+                        ax_.set_title(dfs_keys[idx] + " (" + str(len(df[cols])) + ")", fontdict = fontdict)
+                    else:
+                        ax_.set_title(dfs_keys[idx], fontdict = fontdict)
                     if is_use_the_same_y_lim:
                         ax_.set_ylim(0, max_value)
             else:
@@ -571,20 +574,15 @@ class KaggleSurvey:
                     if idx == 0:
                         if len(order) != 0:
                             order_li = order
-                    ax_ = None
-                    if plot_cols == 1:
-                        ax_ = ax[idx] 
-                    elif plot_cols > 1:
-                        ax_ = ax[idx // plot_cols, idx % plot_cols] if depth_of_dfs > 1 else ax[idx % plot_cols]
-                    else:
-                        print("wrong plot_cols.")
-                        return
-                    
+                    ax_ = self.__get_ax(ax, idx, plot_cols, depth_of_dfs)
                     self.__per_df(df).plot.bar(ax = ax_)
                     for p in ax_.patches:
                         ax_.annotate(str(round(p.get_height() * 100, 2)) + "%", (p.get_x() + p.get_width()/2., p.get_height()), ha='center', va='center', xytext=(0, 10), textcoords='offset points')
                     ax_.set_xticklabels(list(range(1, len(order_li) + 1)), rotation = 0)
-                    ax_.set_title(dfs_keys[idx], fontdict = fontdict)
+                    if is_need_number_of_respondents:
+                        ax_.set_title(dfs_keys[idx] + " (" + str(df.values.sum()) + ")", fontdict = fontdict)
+                    else:
+                        ax_.set_title(dfs_keys[idx], fontdict = fontdict)
                     if is_use_the_same_y_lim:
                         ax_.set_ylim(0, max_value)
                 plt.show()
